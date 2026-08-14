@@ -1,0 +1,91 @@
+name: verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+jobs:
+  manifest:
+    name: Validate server.json
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate against the published MCP schema
+        run: |
+          python3 - <<'PY'
+          import json, urllib.request, sys
+
+          doc = json.load(open('server.json'))
+          schema = json.load(urllib.request.urlopen(doc['$schema']))
+          detail = schema['definitions']['ServerDetail']
+
+          errors = []
+          unknown = set(doc) - set(detail['properties'])
+          if unknown:
+              errors.append(f'unknown keys: {sorted(unknown)}')
+
+          missing = set(detail['required']) - set(doc)
+          if missing:
+              errors.append(f'missing required keys: {sorted(missing)}')
+
+          repo = doc.get('repository', {})
+          repo_missing = set(schema['definitions']['Repository']['required']) - set(repo)
+          if repo_missing:
+              errors.append(f'repository missing: {sorted(repo_missing)}')
+
+          if errors:
+              sys.exit('server.json invalid:\n  ' + '\n  '.join(errors))
+          print('server.json is valid')
+          PY
+
+  endpoint:
+    name: Check the live endpoint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Endpoint responds and advertises OAuth
+        run: |
+          url=$(python3 -c "import json;print(json.load(open('server.json'))['remotes'][0]['url'])")
+          echo "Checking $url"
+
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$url" \
+            -H 'Content-Type: application/json' \
+            -H 'Accept: application/json, text/event-stream' \
+            -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}')
+
+          if [ "$code" != "401" ]; then
+            echo "Expected 401 from an unauthenticated tools/list, got $code"
+            exit 1
+          fi
+          echo "Endpoint requires auth as expected"
+
+          for doc in \
+            "https://addcal.co/.well-known/oauth-protected-resource" \
+            "https://addcal.co/.well-known/oauth-authorization-server"
+          do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$doc")
+            [ "$code" = "200" ] || { echo "$doc returned $code"; exit 1; }
+            echo "OK $doc"
+          done
+
+  registry:
+    name: Check the registry entry
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Published version matches this manifest
+        run: |
+          local_version=$(python3 -c "import json;print(json.load(open('server.json'))['version'])")
+          published=$(curl -s 'https://registry.modelcontextprotocol.io/v0/servers?search=co.addcal' \
+            | python3 -c "import json,sys;s=json.load(sys.stdin)['servers'];print(s[0]['server']['version'] if s else 'none')")
+
+          echo "manifest: $local_version"
+          echo "registry: $published"
+
+          if [ "$local_version" != "$published" ]; then
+            echo "::warning::server.json is $local_version but the registry has $published. Run mcp-publisher publish."
+          fi

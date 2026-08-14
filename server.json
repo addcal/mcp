@@ -1,0 +1,30 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "co.addcal/addcal",
+  "title": "AddCal",
+  "description": "Publish public calendars and events others subscribe to: RSVPs, feeds and add-to-calendar links.",
+  "version": "1.0.1",
+  "websiteUrl": "https://addcal.co/documentation/mcp-server",
+  "repository": {
+    "url": "https://github.com/addcal/mcp",
+    "source": "github"
+  },
+  "icons": [
+    {
+      "src": "https://addcal.co/android-chrome-192x192.png",
+      "mimeType": "image/png",
+      "sizes": ["192x192"]
+    },
+    {
+      "src": "https://addcal.co/android-chrome-512x512.png",
+      "mimeType": "image/png",
+      "sizes": ["512x512"]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://addcal.co/mcp"
+    }
+  ]
+}
