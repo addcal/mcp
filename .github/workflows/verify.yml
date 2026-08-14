@@ -80,8 +80,15 @@ jobs:
       - name: Published version matches this manifest
         run: |
           local_version=$(python3 -c "import json;print(json.load(open('server.json'))['version'])")
-          published=$(curl -s 'https://registry.modelcontextprotocol.io/v0/servers?search=co.addcal' \
-            | python3 -c "import json,sys;s=json.load(sys.stdin)['servers'];print(s[0]['server']['version'] if s else 'none')")
+          name=$(python3 -c "import json,urllib.parse;print(urllib.parse.quote(json.load(open('server.json'))['name'],safe=''))")
+          published=$(curl -s "https://registry.modelcontextprotocol.io/v0.1/servers/$name/versions" \
+            | python3 -c "
+          import json,sys
+          rows = json.load(sys.stdin).get('servers', [])
+          latest = [r['server']['version'] for r in rows
+                    if r.get('_meta', {}).get('io.modelcontextprotocol.registry/official', {}).get('isLatest')]
+          print(latest[0] if latest else 'none')
+          ")
 
           echo "manifest: $local_version"
           echo "registry: $published"
